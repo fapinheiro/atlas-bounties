@@ -1,0 +1,1 @@
+docker build -t atlas-bounties-bot:1.0.0 .

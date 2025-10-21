@@ -1,0 +1,30 @@
+networks:
+  vpcatlas:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.4.0.0/16
+
+services:
+  atlas-bounties-bot:
+    image: atlas-bounties-bot:1.0.0
+    networks:
+     vpcatlas:
+      ipv4_address: 10.4.1.0
+    hostname: atlas-bounties-bot
+    entrypoint: /bin/sh
+    tty: true
+      
+  atlas-lw-server:
+    image: atlas-lw-server:1.0.0
+    networks:
+     vpcatlas:
+      ipv4_address: 10.4.2.0
+    hostname: atlas-lw-server
+    ports:
+      - 32111:32111
+    environment:
+      RUST_LOG: ${RUST_LOG}
+      MNEMONICS: ${MNEMONICS}
+    volumes:
+      - ./data:/data

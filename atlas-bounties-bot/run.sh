@@ -1,0 +1,1 @@
+docker run -d --name atlas-bounties-bot --rm

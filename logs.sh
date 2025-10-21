@@ -1,0 +1,1 @@
+docker-compose logs -f atlas-lw-server 

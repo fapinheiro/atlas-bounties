@@ -1,0 +1,1 @@
+docker build -t atlas-lw-server:1.0.0 .
