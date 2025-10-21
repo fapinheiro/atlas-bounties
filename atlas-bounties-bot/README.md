@@ -1,12 +1,11 @@
 # Atlas Bounties Bot
 
- The Atlas Bounties Bot is the interface for users to create bounties via Telegram.
+The Atlas Bounties Bot is the interface for users to create bounties via Telegram.
 
  
 # Inpect
 
-    To inspect debian image, to run commands manually in order to debug something.
-
+To inspect debian image, to run commands manually in order to debug something.
 ```shell
 # Inspect the base image
 docker container run --rm -it -v $(pwd)/data:/data debian:stable-slim bash

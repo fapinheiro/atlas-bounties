@@ -1,11 +1,10 @@
 # Atlas LW Server
 
-    The Atlas Liquid Wallet Server is the Atlas server layer in order to provide wallet operations such as generating address for clients via JSON-RPC protocol.
+The Atlas Liquid Wallet Server is the Atlas server layer in order to provide wallet operations such as generating address for clients via JSON-RPC protocol.
 
 # Inpect
 
-    To inspect debian image, to run commands manually in order to debug something.
-
+To inspect debian image, to run commands manually in order to debug something.
 ```shell
 # Inspect the base image
 docker container run --rm -it -v $(pwd)/data:/data debian:stable-slim bash
@@ -22,8 +21,7 @@ docker container exec -it atlas-bounties-atlas-lw-server-1 bash
 
 # Build
 
-    To build atlas liquid wallet server
-
+To build atlas liquid wallet server
 ```shell
 docker build -t atlas-lw-server:1.0.0 .
 
@@ -34,8 +32,7 @@ or
 
 # Run
 
-    To run atlas liquid wallet server locally
-
+To run atlas liquid wallet server locally
 ```shell
 docker run -d --name atlas-lw-server --rm \
   -p 32111:32111 \
@@ -49,7 +46,7 @@ or
 
 # Logs
 
-    To see the container logs
+To see the container logs
 ```shell
 # The entire log
 docker logs -f atlas-lw-server
@@ -63,7 +60,7 @@ docker logs --tail 100 atlas-lw-server
 
 # RPC
 
-    To see if atlas liquid wallet server is running
+To see if atlas liquid wallet server is running
 ```shell
 # get into de container first
 docker container exec -it atlas-lw-server bash
