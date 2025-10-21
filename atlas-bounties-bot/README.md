@@ -3,6 +3,12 @@
 The Atlas Bounties Bot is the interface for users to create bounties via Telegram.
 
  
+# Setup
+```
+npm install && npm start
+```
+
+
 # Inpect
 
 To inspect debian image, to run commands manually in order to debug something.
