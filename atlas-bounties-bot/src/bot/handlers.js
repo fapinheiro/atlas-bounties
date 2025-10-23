@@ -2,20 +2,11 @@ const { Markup } = require('telegraf');
 const config = require('../core/config');
 const logger = require('../core/logger');
 const { escapeMarkdownV2 } = require('../utils/escapeMarkdown');
-
-const featuresDB = [
-    { id: 1, title: 'Integração com Carteiras.', shortDescription: 'Permitir conexão direta com carteiras populares.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 20 },
-    { id: 2, title: 'Notificações em Tempo Real', shortDescription: 'Alertas instantâneos para atividades importantes.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 15 },
-    { id: 3, title: 'Dashboard Personalizado', shortDescription: 'Painel de controle com métricas e estatísticas.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 25 },
-    { id: 4, title: 'Suporte Multilíngue', shortDescription: 'Interface disponível em vários idiomas.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 10 },
-    { id: 5, title: 'Modo Escuro', shortDescription: 'Tema escuro para melhor experiência noturna.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 5 },
-    { id: 6, title: 'Relatórios Avançados', shortDescription: 'Ferramentas de análise detalhada para usuários avançados.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 30 },
-    { id: 7, title: 'Automação de Tarefas', shortDescription: 'Scripts personalizáveis para automatizar processos repetitivos.', detailedDescription: `Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s, when an unknown printer took a galley of type`, bounty: 40 }
-];
+const liquidApiService = require('../services/liquidApiService');
 
 let awaitingInputForUser = {};
 
-const registerBotHandlers = (bot) => {
+const registerBotHandlers = (bot, dbPool) => {
 
     const logError = (handlerName, error, ctx) => {
         const userId = ctx?.from?.id || 'N/A';
@@ -117,6 +108,23 @@ const registerBotHandlers = (bot) => {
         }
     });
 
+    /** 
+     * Voltar ao menu principal
+    */
+    bot.action('back_to_main_menu', async (ctx) => {
+        try {
+            clearUserState(ctx.from.id); 
+            await ctx.answerCbQuery();
+            await sendMainMenu(ctx);
+        } catch (error) { 
+            logError('back_to_main_menu', error, ctx); 
+            await sendTempError(ctx);
+        }
+    });
+    
+    /** 
+     * Listar funcionalidades disponíveis
+    */
     bot.action('list_features', async (ctx) => {
         try {
             // clearUserState(ctx.from.id);
@@ -131,7 +139,7 @@ const registerBotHandlers = (bot) => {
 
             // TODO: to implement pagination
             features.forEach(feature => {
-                buttons.push([Markup.button.callback(`${feature.id}# \- ${feature.title} \- R\$ ${feature.bounty.toFixed(2)}`, `feature_details_${feature.id}`)]);
+                buttons.push([Markup.button.callback(`${feature.id}# \- ${feature.title} \- R\$ ${feature.bounty.toFixed(2)}`, `feature_details:${feature.id}`)]);
             });
 
             buttons.push([Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]);
@@ -146,28 +154,91 @@ const registerBotHandlers = (bot) => {
         }
     });
 
-    // Handler para cancelar verificação pendente
-    bot.action(/^feature_details_(.+)$/, async (ctx) => {
+    /** 
+     * Detalhes da funcionalidade selecionada
+    */
+    bot.action(/^feature_details:(.+)$/, async (ctx) => {
         try {
             await ctx.answerCbQuery();
             const featureId = ctx.match[1];
-            
+
             let feature = featuresDB.find(f => f.id.toString() === featureId);
-                        
+
             const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
                                      `${escapeMarkdownV2(feature.shortDescription)}\n\n` +
                                      `${escapeMarkdownV2(feature.detailedDescription)}\n\n`;
             
             const keyboard = Markup.inlineKeyboard([
-                [Markup.button.callback('✅ Votar', 'vote_feature_' + feature.id)],
+                [Markup.button.callback('✅ Votar', 'start_vote_feature:' + feature.id)],
                 [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
             ]);
             
             await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
             
         } catch (error) {
-            logError('cancel_verification', error, ctx);
-            await ctx.answerCbQuery('❌ Erro ao cancelar verificação', true);
+            logError('feature_details', error, ctx);
+            await ctx.answerCbQuery('❌ Erro ao exibir funcionalidades', true);
+        }
+    });
+
+    /** 
+     * Iniciar votação na funcionalidade selecionada
+    */
+    bot.action(/^start_vote_feature:(.+)$/, async (ctx) => {
+        try {
+            await ctx.answerCbQuery();
+            const featureId = ctx.match[1];
+
+            logger.info(`User ${ctx.from.id} is starting vote for feature ${featureId}`);
+
+            let feature = featuresDB.find(f => f.id.toString() === featureId);
+
+            const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
+                `Você está prestes a votar na funcionalidade acima\\. Ao confirmar, você concorda em depositar um valor qualquer em uma das opções abaixo para que seu voto seja contabilizado\\.\n\n`;
+            
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('💸 Pix', 'start_vote_feature_pix:' + feature.id)],
+                [Markup.button.callback('💼 Depix', 'start_vote_feature_depix:' + feature.id)],
+                [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
+            ]);
+            
+            await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+            
+        } catch (error) {
+            logError('start_vote_feature', error, ctx);
+            await ctx.answerCbQuery('❌ Erro ao iniciar votação de funcionalidade', true);
+        }
+    });
+
+    /** 
+     * Iniciar votação na funcionalidade selecionada com pagamento por depix
+    */
+    bot.action(/^start_vote_feature_depix:(.+)$/, async (ctx) => {
+        try {
+            await ctx.answerCbQuery();
+            const featureId = ctx.match[1];
+
+            logger.info(`User ${ctx.from.id} is starting vote for feature ${featureId}`);
+
+            let feature = featuresDB.find(f => f.id.toString() === featureId);
+
+            const data = await liquidApiService.generateAddressForDeposit(featureId);
+            const { address } = data;
+                    
+            const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
+                `Realize um deposito no endereço **liquid** abaixo\\. Após o pagamento ser confirmado atualizaremos a lista de funcionalidades com o valor depositado\\.\n\n` +
+                `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n` +
+                `${address}`;
+            
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+            ]);
+            
+            await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+            
+        } catch (error) {
+            logError('start_vote_feature_depix', error, ctx);
+            await ctx.answerCbQuery('❌ Erro ao iniciar votação com pagamento por Depix', true);
         }
     });
 

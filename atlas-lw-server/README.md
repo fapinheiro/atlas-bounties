@@ -83,4 +83,5 @@ curl --location 'http://localhost:32111' \
 - https://linuxcapable.com/how-to-install-rust-on-debian-linux/
 - https://blockstream.github.io/lwk/book/intro.html
 - https://github.com/Blockstream/lwk/tree/master/lwk_cli
+- https://liquidtestnet.com/faucet
 

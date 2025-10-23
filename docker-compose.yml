@@ -28,3 +28,12 @@ services:
       MNEMONICS: ${MNEMONICS}
     volumes:
       - ./data:/data
+
+  supabase:
+    image: supabase/postgres:15.14.1.025
+    ports:
+    - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: 123
+    volumes:
+      - ./db:/var/lib/postgresql/data

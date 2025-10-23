@@ -11,6 +11,10 @@ const config = {
     telegram: {
         botToken: process.env.TELEGRAM_BOT_TOKEN,
     },
+    liquid: {
+        apiBaseUrl: process.env.LIQUID_API_BASE_URL,
+        walletName: process.env.LIQUID_WALLET_NAME
+    },
     depix: {
         apiBaseUrl: process.env.DEPIX_API_BASE_URL,
         apiJwtToken: process.env.DEPIX_API_JWT_TOKEN,

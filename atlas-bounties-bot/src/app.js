@@ -4,6 +4,7 @@ const express = require('express');
 const { registerBotHandlers } = require('./bot/handlers');
 const https = require('https');
 const { Telegraf } = require('telegraf');
+const { Pool } = require('pg');
 
 logger.info('--------------------------------------------------');
 logger.info('-------- Starting Atlas Bounties Bot -------------');
@@ -27,9 +28,26 @@ const bot = new Telegraf(config.telegram.botToken, {
     handlerTimeout: 90000
 });
 
+const dbPool = new Pool({
+    connectionString: config.supabase.databaseUrl,
+});
+
+dbPool.on('connect', (client) => {
+    client.query("SET TIME ZONE 'America/Sao_Paulo'");
+});
+
+dbPool.query('SELECT NOW() AS now', (err, res) => {
+    if (err) {
+        logger.error('Error connecting to Primary Database:', err.stack);
+        process.exit(1);
+    } else {
+        logger.info(`Successfully connected to Primary Database (${config.app.nodeEnv}). DB Time: ${res.rows[0].now}`);
+    }
+});
+
 const getBotInstance = () => bot;
 
-registerBotHandlers(bot);
+registerBotHandlers(bot, dbPool);
 
 // Tentativa de conectar ao Telegram com retry e fallback
 const disableTelegram = process.env.DISABLE_TELEGRAM === 'true';
