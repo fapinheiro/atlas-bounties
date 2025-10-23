@@ -4,10 +4,10 @@ CREATE TABLE public.features (
     short_description character varying(100) NOT NULL,
     detailed_description character varying(500) NOT NULL,
     liquid_address text NOT NULL,
-    depix_amount numeric(10,2) NULL,
-    lbtc_amount numeric(10,2) NULL,
+    depix_amount numeric(10,2) DEFAULT 0,
+    lbtc_amount integer DEFAULT 0,
     status character varying(50) DEFAULT 'pending'::character varying,
-    liquid_height integer NULL,
+    liquid_height integer NULL DEFAULT 0,
     created_at timestamp without time zone DEFAULT now(),
     updated_at timestamp without time zone DEFAULT now()
 );

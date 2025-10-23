@@ -23,7 +23,7 @@ const config = {
     supabase: {
         url: process.env.SUPABASE_URL,
         serviceKey: process.env.SUPABASE_SERVICE_KEY,
-        databaseUrl: process.env.DATABASE_URL,
+        databaseUrl: process.env.DATABASE_URL
     },
     app: {
         baseUrl: process.env.APP_BASE_URL,
@@ -70,5 +70,6 @@ logger.info(`Configuration loaded for NODE_ENV: "${config.app.nodeEnv}"`);
 logger.info(`Using App Base URL: ${config.app.baseUrl}`);
 logger.info(`Using App Port: ${config.app.port}`);
 logger.info(`Using Redis DB: ${config.redis.db}`);
+logger.info(`Using DB: ${config.supabase.databaseUrl}`);
 
 module.exports = config;

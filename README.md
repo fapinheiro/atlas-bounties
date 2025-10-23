@@ -17,6 +17,10 @@ The payments can be by Pix (via Altas Bridge) or Depix (via Altas Liquid Wallet 
 chmod +x build.sh start.sh stop.sh logs.sh
 ./build.sh
 ```
+- Install Migrations
+```shell
+atlas-bounties-bot\migrations\001.schema.sql
+```
 
 # Run
 Start environment
@@ -59,7 +63,21 @@ docker container exec -it atlas-bounties-atlas-bounties-bot-1 bash
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://atlas-lw-server:32111 -s
 ```
 
+# List Wallet UTXOS via RPC
+To list wallet utxos
 
+```shell
+# localhost
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://localhost:32111 -s
+
+# inside server container
+docker container exec -it atlas-bounties-atlas-lw-server-1 bash
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://localhost:32111 -s
+
+# inside atlas bot container
+docker container exec -it atlas-bounties-atlas-bounties-bot-1 bash
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://atlas-lw-server:32111 -s
+```
 
 
 

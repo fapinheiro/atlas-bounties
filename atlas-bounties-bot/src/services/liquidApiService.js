@@ -40,7 +40,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => {
         logger.info(`Liquid API Response Status: ${response.status} for ${response.config.url}`);
-        logger.info(`Liquid API Response Data: ${JSON.stringify(response.data)}`);
+        // logger.info(`Liquid API Response Data: ${JSON.stringify(response.data)}`);
         if (response.data.async === true) {
             logger.warn('Liquid API responded in ASYNC mode. This is not fully handled and may cause issues.');
         }
@@ -102,7 +102,44 @@ const generateAddressForDeposit = async (featureId) => {
 };
 
 
+/**
+ * TODO: get utxos paginated if many
+ * Get utxos from wallet
+ * @returns 
+ */
+const listUtxos = async () => {
+
+    const payload = {
+        method: 'wallet_utxos',
+        params: {
+            name: config.liquid.walletName,
+        },
+        id: generateSixDigitNumber(),
+        jsonrpc: '2.0'
+    };
+
+    try {
+        const data = await api.post('/', payload); 
+        if (!data.result?.utxos) {
+            throw new Error(data.error.message);
+        }
+        if (data.result?.utxos) {
+            logger.info(`Liquid utxos received!`);
+            return data.result?.utxos; 
+        }
+        if (data.async === true) {
+            throw new Error('API Liquid respondeu em modo assíncrono. Tente novamente em alguns instantes.');
+        }
+        throw new Error('Resposta inesperada da API Liquid ao consultar uxtos.');
+    } catch (error) {
+        const errorMessage = error.response?.data?.response?.errorMessage || error.message || 'Erro desconhecido na API Liquid.';
+        logger.error(`Failed to list utxos: ${errorMessage}`);
+        throw new Error(`Falha ao gerar listar utxos: ${errorMessage}`);
+    }
+};
+
 
 module.exports = {
-    generateAddressForDeposit
+    generateAddressForDeposit,
+    listUtxos
 };

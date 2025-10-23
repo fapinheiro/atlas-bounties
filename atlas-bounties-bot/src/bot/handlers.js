@@ -130,17 +130,27 @@ const registerBotHandlers = (bot, dbPool) => {
             // clearUserState(ctx.from.id);
             await ctx.answerCbQuery();
 
-            // TODO: query features from database order by bounty desc
-            let features = featuresDB.sort((a, b) => b.bounty - a.bounty);
+            // Buscar top 10 funcionalidades do banco de dados
+            const { rows: features } = await dbPool.query(
+                `SELECT id, title, depix_amount 
+                 FROM features 
+                 WHERE status = 'confirmed'
+                 ORDER BY id DESC, depix_amount DESC 
+                 LIMIT 10`,
+                []
+            );
 
             let message = `**Lista de Funcionalidades**\n\n`;
 
             let buttons = [];
 
-            // TODO: to implement pagination
-            features.forEach(feature => {
-                buttons.push([Markup.button.callback(`${feature.id}# \- ${feature.title} \- R\$ ${feature.bounty.toFixed(2)}`, `feature_details:${feature.id}`)]);
-            });
+            if (features.length === 0) {
+                message += `Nenhuma funcionalidade ainda\\. Seja o primeiro e envie uma sugestão\\!`;
+            } else {
+                features.forEach((feature) => {
+                    buttons.push([Markup.button.callback(`${feature.id}# \- ${feature.title} \- R\$ ${feature.depix_amount}`, `feature_details:${feature.id}`)]);
+                });
+            }
 
             buttons.push([Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]);
 
@@ -162,11 +172,16 @@ const registerBotHandlers = (bot, dbPool) => {
             await ctx.answerCbQuery();
             const featureId = ctx.match[1];
 
-            let feature = featuresDB.find(f => f.id.toString() === featureId);
+            const { rows } = await dbPool.query(`
+                SELECT id, title, short_description, detailed_description
+                FROM features WHERE id = $1
+            `, [featureId]);
+
+            const feature = rows[0];
 
             const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
-                                     `${escapeMarkdownV2(feature.shortDescription)}\n\n` +
-                                     `${escapeMarkdownV2(feature.detailedDescription)}\n\n`;
+                                     `${escapeMarkdownV2(feature.short_description)}\n\n` +
+                                     `${escapeMarkdownV2(feature.detailed_description)}\n\n`;
             
             const keyboard = Markup.inlineKeyboard([
                 [Markup.button.callback('✅ Votar', 'start_vote_feature:' + feature.id)],
@@ -189,9 +204,12 @@ const registerBotHandlers = (bot, dbPool) => {
             await ctx.answerCbQuery();
             const featureId = ctx.match[1];
 
-            logger.info(`User ${ctx.from.id} is starting vote for feature ${featureId}`);
+            const { rows } = await dbPool.query(`
+                SELECT id, title, short_description, detailed_description
+                FROM features WHERE id = $1
+            `, [featureId]);
 
-            let feature = featuresDB.find(f => f.id.toString() === featureId);
+            const feature = rows[0];
 
             const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
                 `Você está prestes a votar na funcionalidade acima\\. Ao confirmar, você concorda em depositar um valor qualquer em uma das opções abaixo para que seu voto seja contabilizado\\.\n\n`;
@@ -218,17 +236,21 @@ const registerBotHandlers = (bot, dbPool) => {
             await ctx.answerCbQuery();
             const featureId = ctx.match[1];
 
-            logger.info(`User ${ctx.from.id} is starting vote for feature ${featureId}`);
+            const { rows } = await dbPool.query(`
+                SELECT id, title, liquid_address
+                FROM features WHERE id = $1
+            `, [featureId]);
 
-            let feature = featuresDB.find(f => f.id.toString() === featureId);
+            const feature = rows[0];
 
-            const data = await liquidApiService.generateAddressForDeposit(featureId);
-            const { address } = data;
-                    
+            // const data = await liquidApiService.generateAddressForDeposit(featureId);
+
+            // const { address } = data;
+            
             const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
-                `Realize um deposito no endereço **liquid** abaixo\\. Após o pagamento ser confirmado atualizaremos a lista de funcionalidades com o valor depositado\\.\n\n` +
+                `Realize um deposito Depix no endereço **liquid** abaixo\\. Após o pagamento ser confirmado atualizaremos a lista de funcionalidades com o valor depositado\\.\n\n` +
                 `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n` +
-                `${address}`;
+                `${escapeMarkdownV2(feature.liquid_address)}`;
             
             const keyboard = Markup.inlineKeyboard([
                 [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]

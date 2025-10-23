@@ -5,12 +5,15 @@ const { registerBotHandlers } = require('./bot/handlers');
 const https = require('https');
 const { Telegraf } = require('telegraf');
 const { Pool } = require('pg');
+const ScheduledJobsService = require('./services/scheduledJobs');
 
 logger.info('--------------------------------------------------');
 logger.info('-------- Starting Atlas Bounties Bot -------------');
 logger.info(`------ Environment: ${config.app.nodeEnv} --------`);
 logger.info('--------------------------------------------------');
 
+
+// Initialize HTTPS agent for Telegram API
 const httpsAgent = new https.Agent({
     keepAlive: true,
     family: 4,
@@ -28,8 +31,9 @@ const bot = new Telegraf(config.telegram.botToken, {
     handlerTimeout: 90000
 });
 
+// Initialize PostgreSQL connection pool
 const dbPool = new Pool({
-    connectionString: config.supabase.databaseUrl,
+    connectionString: config.supabase.databaseUrl
 });
 
 dbPool.on('connect', (client) => {
@@ -45,8 +49,16 @@ dbPool.query('SELECT NOW() AS now', (err, res) => {
     }
 });
 
-const getBotInstance = () => bot;
+// Initialize scheduled jobs service
+const scheduledJobs = new ScheduledJobsService(dbPool);
+scheduledJobs.initialize().then(() => {
+    logger.info('[App] Scheduled jobs service initialized successfully');
+}).catch(err => {
+    logger.error('[App] Failed to initialize scheduled jobs:', err);
+});
 
+// Register bot handlers
+const getBotInstance = () => bot;
 registerBotHandlers(bot, dbPool);
 
 // Tentativa de conectar ao Telegram com retry e fallback
