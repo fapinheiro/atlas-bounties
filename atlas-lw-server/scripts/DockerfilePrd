@@ -33,14 +33,14 @@ RUN export PATH=$PATH:$LWK_TARGET
 
 
 # Diretório para dados
-VOLUME ["/data"]
+VOLUME ["/dataprd"]
 
 # Porta padrão (você define conforme o servidor LWK expõe)
-EXPOSE 32111
+EXPOSE 32112
 
 # RUN sudo iptables -A INPUT -p tcp -s 10.4.0.1 --dport 32111 -j ACCEPT
 # RUN sudo iptables -A INPUT -p tcp -s 127.0.0.1 --dport 32111 -j ACCEPT
 # RUN sudo iptables -A INPUT -p tcp --dport 32111 -j DROP
 
 # Comando padrão para iniciar o servidor RPC
-CMD ["lwk_cli", "--network", "testnet", "--addr", "0.0.0.0:32111", "server", "start", "--datadir", "/data"]
+CMD ["lwk_cli", "--network", "mainnet", "--addr", "0.0.0.0:32112", "server", "start", "--electrum-url", "blockstream.info:995", "--datadir", "/dataprd"]

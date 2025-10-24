@@ -42,10 +42,18 @@ docker container exec -it atlas-bounties-atlas-lw-server-1 bash
 # warning: get mnemonic or ignore if already defined in .env
 MNEMONICS=$(lwk_cli signer generate | jq -r .mnemonic)
 
+# prd
+MNEMONICS=$(lwk_cli --network mainnet --addr 127.0.0.1:32112 signer generate | jq -r .mnemonic)
+
 # load wallet
 lwk_cli signer load-software --persist true --mnemonic "$MNEMONICS" --signer s1
 DESCRIPTOR=$(lwk_cli signer singlesig-desc --signer s1 --descriptor-blinding-key slip77 --kind wpkh | jq -r .descriptor)
 lwk_cli wallet load --wallet w1 -d "$DESCRIPTOR"
+
+#prd
+lwk_cli --network mainnet --addr 127.0.0.1:32112 signer load-software --persist true --mnemonic "$MNEMONICS" --signer s1
+DESCRIPTOR=$(lwk_cli --network mainnet --addr 127.0.0.1:32112 signer singlesig-desc --signer s1 --descriptor-blinding-key slip77 --kind wpkh | jq -r .descriptor)
+lwk_cli --network mainnet --addr 127.0.0.1:32112 wallet load --wallet w1 -d "$DESCRIPTOR"
 ```
 
 # Generate Address via RPC

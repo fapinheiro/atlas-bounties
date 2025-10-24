@@ -308,24 +308,24 @@ const registerBotHandlers = (bot, dbPool) => {
 
         if (userState && userState.type === 'request_feature_initial') {
             try {
-               const message = `Por favor, digite o *uma descrição curta* para a funcionalidade em até 100 caracteres\\.`;
+               const message = `Agora, digite o *uma descrição curta* para a funcionalidade em até 100 caracteres\\.`;
                const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
                setUserState(ctx.from.id, { type: 'request_feature_short_description', featureTitle: text });
            } catch (error) { 
                logError('request_feature_short_description', error, ctx); 
                if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
-               await ctx.replyWithMarkdownV2('Por favor, digite o *uma descrição curta* para a funcionalidade\\.');
+               await ctx.replyWithMarkdownV2('Agora, digite o *uma descrição curta* para a funcionalidade\\.');
            }
 
         } else if (userState && userState.type === 'request_feature_short_description' ) {
             try {
-                const message = `Por favor, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
+                const message = `Para finalizar, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
                 const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
                 setUserState(ctx.from.id, { type: 'request_feature_detailed_description', featureTitle: userState.featureTitle, featureShortDescription: text });
             } catch (error) { 
                 logError('request_feature_detailed_description', error, ctx); 
                 if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
-                await ctx.replyWithMarkdownV2('Por favor, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.');
+                await ctx.replyWithMarkdownV2('Para finalizar, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.');
             }
         } else if (userState && userState.type === 'request_feature_detailed_description' ) {
 

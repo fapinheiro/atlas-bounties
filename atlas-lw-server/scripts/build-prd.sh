@@ -1,0 +1,1 @@
+docker build -f DockerfilePrd -t atlas-lw-server:1.0.0-prd .

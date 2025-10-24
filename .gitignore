@@ -164,8 +164,10 @@ ecosystem.config.js.backup
 *.db-shm
 *.db-wal
 data/
+dataprd/
 database/
 db/
+dbprd/
 backup/
 *.sql.backup
 *.dump

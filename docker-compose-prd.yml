@@ -1,0 +1,41 @@
+networks:
+  vpcatlas:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.4.0.0/16
+
+services:
+  atlas-bounties-bot:
+    image: atlas-bounties-bot:1.0.0
+    networks:
+     vpcatlas:
+      ipv4_address: 10.4.1.0
+    hostname: atlas-bounties-bot
+    entrypoint: /bin/sh
+    tty: true
+      
+  atlas-lw-server:
+    image: atlas-lw-server:1.0.0-prd
+    env_file:
+      - .env.prd
+    networks:
+     vpcatlas:
+      ipv4_address: 10.4.2.0
+    hostname: atlas-lw-server
+    ports:
+      - 32112:32112
+    environment:
+      RUST_LOG: ${RUST_LOG}
+      MNEMONICS: ${MNEMONICS}
+    volumes:
+      - ./dataprd:/dataprd
+
+  supabase:
+    image: supabase/postgres:15.14.1.025
+    ports:
+    - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: 'abc123'
+    volumes:
+      - ./dbprd:/var/lib/postgresql/data
