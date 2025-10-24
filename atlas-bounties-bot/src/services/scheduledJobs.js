@@ -31,15 +31,18 @@ class ScheduledJobs {
 
             try {
 
+                // Obtain UTXOs from Liquid API
                 const utxos = await liquidApiService.listUtxos();
 
+                // If there are UTXOs to process
                 if (utxos.length > 0) {
 
                     // Process each UTXO
-                    utxos.forEach(async (utxo) => {
+                    for (const utxo of utxos) {
 
+                        // Query features with matching liquid address and not expired
                         const { rows  } = await this.dbPool.query(
-                            `SELECT id, depix_amount, lbtc_amount, liquid_address, liquid_height 
+                            `SELECT id, depix_amount, lbtc_amount, usdt_amount, liquid_address, liquid_height 
                             FROM features 
                             WHERE status not in ('expired') 
                             AND liquid_address = $1`, [utxo.address]);
@@ -50,15 +53,19 @@ class ScheduledJobs {
 
                             // L-BTC
                             if (utxo.asset === '144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49') {
+
+                                const lbtc_amount = Number(feature.lbtc_amount) + Number(utxo.value);
+                                const ranking = Number(feature.depix_amount) + Number(lbtc_amount) + Number(feature.usdt_amount);
                                 await this.dbPool.query(
                                     `UPDATE features 
-                                    SET lbtc_amount = $1, liquid_height = $2, updated_at = NOW() 
-                                    WHERE id = $3`,
-                                    [Number(feature.lbtc_amount) + Number(utxo.value), utxo.height, feature.id]
+                                    SET lbtc_amount = $1, liquid_height = $2, ranking = $3, updated_at = NOW(), status = 'confirmed' 
+                                    WHERE id = $4`,
+                                    [lbtc_amount, utxo.height, ranking, feature.id]
                                 );
                                 logger.info(`[ScheduledJobs] Updated feature ${feature.id} with new amount ${utxo.value} of L-BTC at height ${utxo.height}`);
                             }
 
+                            // TODO: Testar depix rede principal
                             // // Depix
                             // if (!utxo.asset === '144c654344aa716d6f3abcc1ca90e5641e4e2a7f633bc09fe3baf64585819a49') {
                             //     await this.dbPool.query(
@@ -71,7 +78,7 @@ class ScheduledJobs {
                             // }
                             
                         }
-                    });
+                    }
                 }
             
 

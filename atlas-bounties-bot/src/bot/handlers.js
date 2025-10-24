@@ -8,6 +8,14 @@ let awaitingInputForUser = {};
 
 const registerBotHandlers = (bot, dbPool) => {
 
+    const clearUserState = (userId) => {
+        if (userId) delete awaitingInputForUser[userId];
+    };
+
+    const setUserState = (userId, state) => {
+        if (userId) awaitingInputForUser[userId] = state;
+    };
+
     const logError = (handlerName, error, ctx) => {
         const userId = ctx?.from?.id || 'N/A';
         logger.error(`Error in ${handlerName} for user ${userId}: ${error.message}`);
@@ -36,7 +44,6 @@ const registerBotHandlers = (bot, dbPool) => {
     const mainMenuKeyboardObj = Markup.inlineKeyboard([
         [Markup.button.callback('📋 Listar funcionalidades', 'list_features')],
         [Markup.button.callback('🆕 Requisitar uma nova funcionalidade', 'request_feature')],
-        [Markup.button.callback('🗳️ Votar em uma funcionalidade', 'vote_feature')],
         [Markup.button.url('💬 Comunidade Atlas', config.links.communityGroup)]
     ]);
 
@@ -69,10 +76,6 @@ const registerBotHandlers = (bot, dbPool) => {
         }
     };
 
-    const clearUserState = (userId) => {
-        if (userId) delete awaitingInputForUser[userId];
-    };
-
     bot.start(async (ctx) => {
         clearUserState(ctx.from.id);
         const telegramUserId = ctx.from.id;
@@ -97,8 +100,8 @@ const registerBotHandlers = (bot, dbPool) => {
         try {
             let welcomeMsg = `Bem-vindo! 🎯\n\n` +
                 `Este é o Atlas Bounties, onde você pode sugerir e votar em funcionalidades para o Atlas Bridge.\n\n` +
-                `Acreditamos que novas funcionalidades devem ter valor real. Por isso, as funcionalidades apenas serão aceitas mediante um depósito em Pix ou Depix, garantindo que apenas propostas sérias sejam consideradas.\n\n` +
-                `Acreditamos que ninguém irá sugerir ou votar em algo que não tenha valor real para si mesmo\\. Portanto, funcionalidades com mais depósitos terão prioridade na implementação.\n\n` +
+                `Acreditamos que novas funcionalidades devem ter valor real. Por isso, as funcionalidades apenas serão aceitas mediante um depósito em Pix, Depix, L\-BTC ou USDT (Liquid), garantindo que apenas propostas sérias sejam consideradas.\n\n` +
+                `Acreditamos que ninguém irá sugerir ou votar em algo que não tenha valor real para si mesmo\. Portanto, funcionalidades com mais depósitos terão prioridade na implementação.\n\n` +
                 `Sua participação ativa ajuda a moldar o futuro do Atlas Bridge, tornando-o mais útil para todos os usuários.\n\n` +
                 `Vamos construir juntos um Atlas Bridge melhor e mais útil para todos!\n\n`;
             await sendMainMenu(ctx, welcomeMsg);
@@ -135,20 +138,20 @@ const registerBotHandlers = (bot, dbPool) => {
                 `SELECT id, title, depix_amount 
                  FROM features 
                  WHERE status = 'confirmed'
-                 ORDER BY id DESC, depix_amount DESC 
+                 ORDER BY ranking DESC 
                  LIMIT 10`,
                 []
             );
 
-            let message = `**Lista de Funcionalidades**\n\n`;
+            let message = `**Lista das Top 10 Funcionalidades**\n\n`;
 
             let buttons = [];
 
             if (features.length === 0) {
-                message += `Nenhuma funcionalidade ainda\\. Seja o primeiro e envie uma sugestão\\!`;
+                message += `Nenhuma funcionalidade ainda\\. Seja o primeiro e envie uma melhoria para o Atlas Bridge\\!`;
             } else {
-                features.forEach((feature) => {
-                    buttons.push([Markup.button.callback(`${feature.id}# \- ${feature.title} \- R\$ ${feature.depix_amount}`, `feature_details:${feature.id}`)]);
+                features.forEach((feature, i) => {
+                    buttons.push([Markup.button.callback(`${i+1}\. ${feature.title}`, `feature_details:${feature.id}`)]);
                 });
             }
 
@@ -173,15 +176,19 @@ const registerBotHandlers = (bot, dbPool) => {
             const featureId = ctx.match[1];
 
             const { rows } = await dbPool.query(`
-                SELECT id, title, short_description, detailed_description
+                SELECT id, title, short_description, detailed_description, depix_amount, lbtc_amount, usdt_amount
                 FROM features WHERE id = $1
             `, [featureId]);
 
             const feature = rows[0];
 
-            const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
+            const message = `📋 **${feature.id}\\# \\- ${feature.title}**\n\n` +
                                      `${escapeMarkdownV2(feature.short_description)}\n\n` +
-                                     `${escapeMarkdownV2(feature.detailed_description)}\n\n`;
+                                     `${escapeMarkdownV2(feature.detailed_description)}\n\n` +
+                                     `Recompensas:\n` +
+                                     `Depix: ${escapeMarkdownV2(Number(feature.depix_amount).toFixed(2))}\n` +
+                                     `L\\-BTC: ${feature.lbtc_amount}\n` + 
+                                     `USDT: ${escapeMarkdownV2(Number(feature.usdt_amount).toFixed(2))}\n`;
             
             const keyboard = Markup.inlineKeyboard([
                 [Markup.button.callback('✅ Votar', 'start_vote_feature:' + feature.id)],
@@ -215,8 +222,8 @@ const registerBotHandlers = (bot, dbPool) => {
                 `Você está prestes a votar na funcionalidade acima\\. Ao confirmar, você concorda em depositar um valor qualquer em uma das opções abaixo para que seu voto seja contabilizado\\.\n\n`;
             
             const keyboard = Markup.inlineKeyboard([
-                [Markup.button.callback('💸 Pix', 'start_vote_feature_pix:' + feature.id)],
-                [Markup.button.callback('💼 Depix', 'start_vote_feature_depix:' + feature.id)],
+                // [Markup.button.callback('💸 Pix', 'start_vote_feature_pix:' + feature.id)],
+                [Markup.button.callback('💼 Depix / L-BTC / USDT', 'start_vote_feature_depix:' + feature.id)],
                 [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
             ]);
             
@@ -243,14 +250,10 @@ const registerBotHandlers = (bot, dbPool) => {
 
             const feature = rows[0];
 
-            // const data = await liquidApiService.generateAddressForDeposit(featureId);
-
-            // const { address } = data;
-            
             const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
-                `Realize um deposito Depix no endereço **liquid** abaixo\\. Após o pagamento ser confirmado atualizaremos a lista de funcionalidades com o valor depositado\\.\n\n` +
+                `Realize um deposito Depix / L\\-BTC / USDT no endereço **Liquid** abaixo\\. Após o pagamento ser confirmado atualizaremos a lista de funcionalidades com o valor depositado\\.\n\n` +
                 `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n` +
-                `${escapeMarkdownV2(feature.liquid_address)}`;
+                `Endereço: \n${escapeMarkdownV2(feature.liquid_address)}`;
             
             const keyboard = Markup.inlineKeyboard([
                 [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
@@ -261,6 +264,116 @@ const registerBotHandlers = (bot, dbPool) => {
         } catch (error) {
             logError('start_vote_feature_depix', error, ctx);
             await ctx.answerCbQuery('❌ Erro ao iniciar votação com pagamento por Depix', true);
+        }
+    });
+
+    /** 
+     * Iniciar solicitação de uma nova feature
+    */
+    bot.action('request_feature', async (ctx) => {
+        try {
+            clearUserState(ctx.from.id); 
+            const message = 'Vamos iniciar a criação da sua sugestão para o Altas Bridge em 3 passos:\n\n' +
+                `1\\. *Título da funcionalidade* \\- Um título curto e objetivo para a funcionalidade que você deseja sugerir em até 50 caracteres\\.\n\n` +
+                `2\\. *Descrição curta* \\- Uma breve descrição da funcionalidade em até 100 caracteres\\.\n\n` +
+                `3\\. *Descrição detalhada* \\- Uma descrição completa da funcionalidade, explicando seu funcionamento e benefícios em até 500 caracteres\\.\n\n` +
+                `Por favor, digite o *título da funcionalidade* em até 50 caracteres para começar\\.`;
+            const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
+            setUserState(ctx.from.id, { type: 'request_feature_initial' });
+            await ctx.answerCbQuery();
+        } catch (error) { 
+            logError('request_feature_initial', error, ctx); 
+            if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
+            await ctx.replyWithMarkdownV2('Por favor, digite o titulo da funcionalidade em até 50 caracteres\\.');
+        }
+    });
+
+    bot.on('text', async (ctx) => {
+        const text = ctx.message.text.trim();
+        const telegramUserId = ctx.from.id;
+        const userState = awaitingInputForUser[telegramUserId];
+
+        if (text.startsWith('/')) { clearUserState(telegramUserId); return; }
+
+        logger.info(`Text input from User ${telegramUserId}: "${text}" in state: ${JSON.stringify(userState)}`);
+        
+        // Apagar mensagem do usuário para manter o chat limpo (exceto comandos)
+        if (userState && !text.startsWith('/')) {
+            try {
+                await ctx.deleteMessage();
+            } catch (e) {
+                // Ignorar erro se não conseguir apagar
+            }
+        }
+
+        if (userState && userState.type === 'request_feature_initial') {
+            try {
+               const message = `Por favor, digite o *uma descrição curta* para a funcionalidade em até 100 caracteres\\.`;
+               const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
+               setUserState(ctx.from.id, { type: 'request_feature_short_description', featureTitle: text });
+           } catch (error) { 
+               logError('request_feature_short_description', error, ctx); 
+               if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
+               await ctx.replyWithMarkdownV2('Por favor, digite o *uma descrição curta* para a funcionalidade\\.');
+           }
+
+        } else if (userState && userState.type === 'request_feature_short_description' ) {
+            try {
+                const message = `Por favor, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
+                const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
+                setUserState(ctx.from.id, { type: 'request_feature_detailed_description', featureTitle: userState.featureTitle, featureShortDescription: text });
+            } catch (error) { 
+                logError('request_feature_detailed_description', error, ctx); 
+                if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
+                await ctx.replyWithMarkdownV2('Por favor, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.');
+            }
+        } else if (userState && userState.type === 'request_feature_detailed_description' ) {
+
+            try {
+
+                // Obter o próximo ID da funcionalidade
+                const { rows } =await dbPool.query(
+                    `SELECT nextval('features_id_seq')`,
+                    []
+                );
+
+                // Gerar endereço Liquid para depósito
+                const data = await liquidApiService.generateAddressForDeposit(rows[0].nextval);
+                const { address } = data;
+
+                // Salvar a nova funcionalidade no banco de dados
+                await dbPool.query(
+                    `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)
+                     VALUES ($1, $2, $3, $4, $5)`,
+                    [rows[0].nextval, userState.featureTitle, userState.featureShortDescription, text, address]
+                );
+
+                const message = `✅ Sua sugestão de funcionalidade foi registrada com sucesso\\.\n\n` +
+                    `Realize um deposito Depix / L\\-BTC / USDT no endereço **Liquid** abaixo\\.\n\n` +
+                    `Após o depósito ser confirmado, sua funcionalidade estará elegível para votação e implementação\\. Quanto maior o valor depositado, maior a prioridade na implementação\\.\n\n` +
+                    `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n` +
+                    `Endereço: \n${escapeMarkdownV2(address)}`
+                const keyboard = Markup.inlineKeyboard([
+                    [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+                ]);
+                
+                if (userState.messageIdToEdit) {
+                    await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+                } else {
+                    await ctx.replyWithMarkdownV2(message, keyboard);
+                }
+
+                clearUserState(telegramUserId);
+            } catch (error) { 
+                logError('finalize_request_feature', error, ctx); 
+                if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
+                await ctx.replyWithMarkdownV2('❌ Erro ao registrar a funcionalidade\\. Por favor, tente /start novamente\\.');
+            }
+
+        } else {
+            // Estado desconhecido ou não tratado
+            clearUserState(telegramUserId);
+            await ctx.reply('❌ Comando não reconhecido. Por favor, use /start para começar.');
         }
     });
 

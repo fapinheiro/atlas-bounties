@@ -125,7 +125,8 @@ const listUtxos = async () => {
         }
         if (data.result?.utxos) {
             logger.info(`Liquid utxos received!`);
-            return data.result?.utxos; 
+            // Sort by height ascending
+            return data.result?.utxos.sort((a, b) => a.height - b.height); 
         }
         if (data.async === true) {
             throw new Error('API Liquid respondeu em modo assíncrono. Tente novamente em alguns instantes.');
