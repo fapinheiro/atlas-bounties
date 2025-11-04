@@ -2,7 +2,10 @@ const { Markup } = require('telegraf');
 const config = require('../core/config');
 const logger = require('../core/logger');
 const { escapeMarkdownV2 } = require('../utils/escapeMarkdown');
+const { validateMonetaryAmount } = require('../utils/validateMonetaryAmount');
 const liquidApiService = require('../services/liquidApiService');
+const atlasApiService = require('../services/atlasApiService');
+const { generateCustomQRCode, generateMinimalQRCode } = require('../services/qrCodeGenerator');
 
 let awaitingInputForUser = {};
 
@@ -40,6 +43,7 @@ const registerBotHandlers = (bot, dbPool) => {
         }
     };
 
+    // TODO revisar textos e mensagens para o usuário
     // Menu principal para usuários validados
     const mainMenuKeyboardObj = Markup.inlineKeyboard([
         [Markup.button.callback('📋 Listar funcionalidades', 'list_features')],
@@ -100,7 +104,7 @@ const registerBotHandlers = (bot, dbPool) => {
         try {
             let welcomeMsg = `Bem-vindo! 🎯\n\n` +
                 `Este é o Atlas Bounties, onde você pode sugerir e votar em funcionalidades para o Atlas Bridge.\n\n` +
-                `Acreditamos que novas funcionalidades devem ter valor real. Por isso, as funcionalidades apenas serão aceitas mediante um depósito em Pix, Depix, L\-BTC ou USDT (Liquid), garantindo que apenas propostas sérias sejam consideradas.\n\n` +
+                `Acreditamos que novas funcionalidades devem ter valor real. Por isso, as funcionalidades apenas serão aceitas mediante um depósito em Pix, Depix, L\-BTC ou USDT na rede liquid, garantindo que apenas propostas sérias sejam consideradas.\n\n` +
                 `Acreditamos que ninguém irá sugerir ou votar em algo que não tenha valor real para si mesmo\. Portanto, funcionalidades com mais depósitos terão prioridade na implementação.\n\n` +
                 `Sua participação ativa ajuda a moldar o futuro do Atlas Bridge, tornando-o mais útil para todos os usuários.\n\n` +
                 `Vamos construir juntos um Atlas Bridge melhor e mais útil para todos!\n\n`;
@@ -222,7 +226,7 @@ const registerBotHandlers = (bot, dbPool) => {
                 `Você está prestes a votar na funcionalidade acima\\. Ao confirmar, você concorda em depositar um valor qualquer em uma das opções abaixo para que seu voto seja contabilizado\\.\n\n`;
             
             const keyboard = Markup.inlineKeyboard([
-                // [Markup.button.callback('💸 Pix', 'start_vote_feature_pix:' + feature.id)],
+                [Markup.button.callback('💸 Pix', 'start_vote_feature_pix:' + feature.id)],
                 [Markup.button.callback('💼 Depix / L-BTC / USDT', 'start_vote_feature_depix:' + feature.id)],
                 [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
             ]);
@@ -232,6 +236,29 @@ const registerBotHandlers = (bot, dbPool) => {
         } catch (error) {
             logError('start_vote_feature', error, ctx);
             await ctx.answerCbQuery('❌ Erro ao iniciar votação de funcionalidade', true);
+        }
+    });
+
+    /** 
+     * Iniciar votação na funcionalidade selecionada com pagamento por pix
+    */
+    bot.action(/^start_vote_feature_pix:(.+)$/, async (ctx) => {
+        try {
+            await ctx.answerCbQuery();
+            const featureId = ctx.match[1];
+
+            const message = `Digite um valor para o deposito Pix\\. O valor deverá ser no máximo de até R$ 3\\.000,00\\.`;
+            setUserState(ctx.from.id, { type: 'start_vote_feature_pix', featureId: featureId });
+
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+            ]);
+            
+            await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+            
+        } catch (error) {
+            logError('start_vote_feature_pix', error, ctx);
+            await ctx.answerCbQuery('❌ Erro ao iniciar votação com pagamento por Pix', true);
         }
     });
 
@@ -341,6 +368,7 @@ const registerBotHandlers = (bot, dbPool) => {
                 const data = await liquidApiService.generateAddressForDeposit(rows[0].nextval);
                 const { address } = data;
 
+                // TODO sanitizar inputs
                 // Salvar a nova funcionalidade no banco de dados
                 await dbPool.query(
                     `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)
@@ -348,6 +376,7 @@ const registerBotHandlers = (bot, dbPool) => {
                     [rows[0].nextval, userState.featureTitle, userState.featureShortDescription, text, address]
                 );
 
+                // TODO disponibilizar pagamento nova feature com pix
                 const message = `✅ Sua sugestão de funcionalidade foi registrada com sucesso\\.\n\n` +
                     `Realize um deposito Depix / L\\-BTC / USDT no endereço **Liquid** abaixo\\.\n\n` +
                     `Após o depósito ser confirmado, sua funcionalidade estará elegível para votação e implementação\\. Quanto maior o valor depositado, maior a prioridade na implementação\\.\n\n` +
@@ -368,6 +397,92 @@ const registerBotHandlers = (bot, dbPool) => {
                 logError('finalize_request_feature', error, ctx); 
                 if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
                 await ctx.replyWithMarkdownV2('❌ Erro ao registrar a funcionalidade\\. Por favor, tente /start novamente\\.');
+            }
+
+        } else if (userState && userState.type === 'start_vote_feature_pix') {
+
+            // Validate monetary amount
+            const maxAllowed = 3000;
+            const validation = validateMonetaryAmount(text, {
+                minValue: 1,
+                maxValue: maxAllowed,
+                maxDecimals: 2
+            });
+
+            if (validation.valid) {
+                const amount = validation.value;
+                logger.info(`Received amount ${amount} for deposit from user ${telegramUserId}`);
+
+                try {
+                    
+                    // Localizar endereço liquid da feature
+                    const { rows } = await dbPool.query(`
+                        SELECT id, title, liquid_address
+                        FROM features WHERE id = $1
+                    `, [userState.featureId]);
+                    let feature = rows[0];
+
+                    // TODO remover hardcode do endereço liquid
+                    feature.liquid_address = 'lq1qqv43u2v8kmalvwmek7und4agdcxl6lq2juffljundpvjzyyvz82utl5use54jpvx3yx8s80zy6c8gt6s9mtvc2lqur79atzq3'; 
+
+                    // Gerar Pix via API Atlas
+                    // const pixData = await atlasApiService.generatePixForDeposit(amount,feature.liquid_address);
+
+                    let pixData = {
+                        id: '65e7ceba-1fc1-4cbd-a054-d205faeaa173',
+                        qrCode: '00020101021226860014br.gov.bcb.pix2564qrcode.fitbank.com.br/QR/cob/038B94EE0B5149E6567D609B1E86F3DD6365204000053039865802BR5925PLEBANK.COM.BR SOLUCOES E6007BARUERI61080645400062070503***6304B7DB'
+                    }
+                    
+                    // Persisitir transação no banco de dados
+                    const dbResult = await dbPool.query( 'INSERT INTO features_pix_transactions (feature_id, user_id, requested_brl_amount, depix_amount_expected, pix_qr_code_payload, payment_status, atlas_transaction_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [userState.featureId, parseInt(telegramUserId), amount, (amount - 0.99), pixData.qrCode, 'PENDING', pixData.id]);
+                    const internalTxId = dbResult.rows[0].id;
+                    logger.info(`Transaction ${internalTxId} for BRL ${amount.toFixed(2)} saved. Pix API ID: ${pixData.id}`);
+    
+                    let caption = `💸 **PIX \\- R\\$ ${escapeMarkdownV2(amount.toFixed(2))}**\n\n`;
+                    caption += `📱 Escaneie com seu banco\n`;
+                    caption += `⏱️ Validade: 19 minutos\n\n`;
+                    caption += `**PIX Copia e Cola:**\n`;
+                    caption += `\`${escapeMarkdownV2(pixData.qrCode)}\`\n\n`;
+                    caption += `Após o depósito ser confirmado, sua funcionalidade estará elegível para votação e implementação\\.\n\n`;
+                    caption += `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n`;
+                    
+                    // Adicionar botoes
+                    // TODO implementar cancelar pix
+                    const keyboard = Markup.inlineKeyboard([
+                        [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+                        // [Markup.button.callback('❌ Cancelar', `cancel_qr:${pixData.id}`)]
+                    ]);
+
+                    // Gerar QR code personalizado com logo Atlas
+                    let qrPhotoMessage;
+                    try {
+                        // TODO revisar imagem do QR personalizado
+                        // const customQRBuffer = await generateCustomQRCode(pixData.qrCode, amount);
+                        const customQRBuffer = await generateMinimalQRCode(pixData.qrCode, amount);
+                        qrPhotoMessage = await ctx.replyWithPhoto(
+                            { source: customQRBuffer },
+                            {
+                                caption: caption,
+                                parse_mode: 'MarkdownV2',
+                                reply_markup: keyboard.reply_markup
+                            }
+                        );
+                        logger.info('QR code personalizado com logo Atlas enviado com sucesso');
+                    } catch (qrError) {
+                        logger.error('Erro ao gerar QR personalizado, usando QR do DePix:', qrError);
+                    }
+
+                    clearUserState(telegramUserId);
+
+                } catch (apiError) {
+                    clearUserState(telegramUserId);
+                    logError('start_vote_feature_pix', apiError, ctx);
+                    const errorReply = 'O serviço Pix parece estar instável. Tente novamente mais tarde.';
+                    if (messageIdToUpdate) await ctx.telegram.editMessageText(ctx.chat.id, messageIdToUpdate, undefined, errorReply);
+                    else await ctx.reply(errorReply);
+                }
+            } else { 
+                await ctx.replyWithMarkdownV2(`Valor inválido\\. Por favor, envie um valor entre R\\$ 1\\.00 e R\\$ ${escapeMarkdownV2(maxAllowed.toFixed(2))} \\(ex: \`45.21\`\\)\\.`);
             }
 
         } else {

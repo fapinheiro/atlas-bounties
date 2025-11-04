@@ -34,7 +34,8 @@ Check if server is running
 ```
 
 # Generate Mnemonics
-For the first time will have to generate mnemonics and setup wallet
+For the first time will have to generate mnemonics and setup wallet.
+
 ```shell
 # get inside server
 docker container exec -it atlas-bounties-atlas-lw-server-1 bash
@@ -50,24 +51,37 @@ lwk_cli signer load-software --persist true --mnemonic "$MNEMONICS" --signer s1
 DESCRIPTOR=$(lwk_cli signer singlesig-desc --signer s1 --descriptor-blinding-key slip77 --kind wpkh | jq -r .descriptor)
 lwk_cli wallet load --wallet w1 -d "$DESCRIPTOR"
 
-#prd
+# prd
 lwk_cli --network mainnet --addr 127.0.0.1:32112 signer load-software --persist true --mnemonic "$MNEMONICS" --signer s1
 DESCRIPTOR=$(lwk_cli --network mainnet --addr 127.0.0.1:32112 signer singlesig-desc --signer s1 --descriptor-blinding-key slip77 --kind wpkh | jq -r .descriptor)
 lwk_cli --network mainnet --addr 127.0.0.1:32112 wallet load --wallet w1 -d "$DESCRIPTOR"
+
+# Scan blockchain if persitent or cache files is lost
+lwk-cli server scan
+# prd
+lwk-cli --network mainnet --addr 127.0.0.1:32112 server scan
+
 ```
+
 
 # Generate Address via RPC
 If wallet is already setup, just try generating address through RPC
 ```shell
 # localhost
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://localhost:32111 -s
+# prd
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://localhost:32112 -s
 
 # inside server container
 docker container exec -it atlas-bounties-atlas-lw-server-1 bash
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://localhost:32111 -s
+# prd
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://localhost:32112 -s
 
 # inside atlas bot container
 docker container exec -it atlas-bounties-atlas-bounties-bot-1 bash
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://atlas-lw-server:32111 -s
+# prd
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_address", "params": { "index": 0, "name": "w1", "with_text_qr": false}, "id":1, "jsonrpc":"2.0"}' http://atlas-lw-server:32111 -s
 ```
 
@@ -77,14 +91,20 @@ To list wallet utxos
 ```shell
 # localhost
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://localhost:32111 -s
+# prd
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://localhost:32112 -s
 
 # inside server container
 docker container exec -it atlas-bounties-atlas-lw-server-1 bash
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://localhost:32111 -s
+# prd
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://localhost:32112 -s
 
 # inside atlas bot container
 docker container exec -it atlas-bounties-atlas-bounties-bot-1 bash
 curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://atlas-lw-server:32111 -s
+# prd
+curl --header "Content-Type: application/json" --request POST --data '{"method":"wallet_utxos", "params": { "name": "w1"}, "id":1, "jsonrpc":"2.0"}' http://atlas-lw-server:32112 -s
 ```
 
 

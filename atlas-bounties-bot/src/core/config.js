@@ -15,10 +15,10 @@ const config = {
         apiBaseUrl: process.env.LIQUID_API_BASE_URL,
         walletName: process.env.LIQUID_WALLET_NAME
     },
-    depix: {
-        apiBaseUrl: process.env.DEPIX_API_BASE_URL,
-        apiJwtToken: process.env.DEPIX_API_JWT_TOKEN,
-        webhookSecret: process.env.DEPIX_WEBHOOK_SECRET,
+    atlas: {
+        apiBaseUrl: process.env.ATLAS_API_BASE_URL,
+        apiJwtToken: process.env.ATLAS_API_JWT_TOKEN,
+        webhookSecret: process.env.ATLAS_WEBHOOK_SECRET,
     },
     supabase: {
         url: process.env.SUPABASE_URL,
@@ -48,12 +48,14 @@ const config = {
 
 const essentialConfigs = {
     'TELEGRAM_BOT_TOKEN': config.telegram.botToken,
-    'DEPIX_API_BASE_URL': config.depix.apiBaseUrl,
-    'DEPIX_API_JWT_TOKEN': config.depix.apiJwtToken,
-    'DEPIX_WEBHOOK_SECRET': config.depix.webhookSecret,
+    'ATLAS_API_BASE_URL': config.atlas.apiBaseUrl,
+    'ATLAS_API_JWT_TOKEN': config.atlas.apiJwtToken,
+    'ATALS_WEBHOOK_SECRET': config.atlas.webhookSecret,
     'DATABASE_URL': config.supabase.databaseUrl,
     'APP_BASE_URL': config.app.baseUrl,
     'REDIS_HOST': config.redis.host,
+    'LIQUID_API_BASE_URL': config.liquid.apiBaseUrl,
+    'LIQUID_WALLET_NAME': config.liquid.walletName
 };
 
 for (const [key, value] of Object.entries(essentialConfigs)) {

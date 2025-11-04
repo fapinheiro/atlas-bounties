@@ -25,3 +25,40 @@ CREATE SEQUENCE public.features_id_seq
 ALTER SEQUENCE public.features_id_seq OWNED BY public.features.id;
 
 ALTER TABLE ONLY public.features ALTER COLUMN id SET DEFAULT nextval('public.features_id_seq'::regclass);
+
+
+
+CREATE TABLE public.features_pix_transactions (
+    id integer NOT NULL,
+    feature_id integer NOT NULL,
+    user_id bigint NOT NULL,
+    requested_brl_amount numeric(10,2) NOT NULL,
+    depix_amount_expected numeric(10,2) NOT NULL,
+    pix_qr_code_payload text NOT NULL,
+    payment_status character varying(50) DEFAULT 'pending'::character varying,
+    atlas_transaction_id character varying(255) NOT NULL,
+    created_at timestamp without time zone DEFAULT now(),
+    updated_at timestamp without time zone DEFAULT now()
+);
+
+CREATE SEQUENCE public.features_pix_transactions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+	
+ALTER SEQUENCE public.features_pix_transactions_id_seq OWNED BY public.features_pix_transactions.id;
+
+ALTER TABLE ONLY public.features_pix_transactions ALTER COLUMN id SET DEFAULT nextval('public.features_pix_transactions_id_seq'::regclass);
+
+ALTER TABLE features
+ADD CONSTRAINT unique_feature_id UNIQUE (id);
+
+ALTER TABLE features_pix_transactions
+    ADD CONSTRAINT fk_features_id
+    FOREIGN KEY (feature_id)
+    REFERENCES features (id);
+
+

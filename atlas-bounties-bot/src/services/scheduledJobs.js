@@ -17,6 +17,8 @@ class ScheduledJobs {
         // Schedule liquid payment detector
         this.scheduleLiquidPaymentDetector();
 
+        // TODO criar job pagamento pix??
+
         logger.info('[ScheduledJobs] All jobs initialized');
     }
 
