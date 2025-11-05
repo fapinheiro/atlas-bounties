@@ -62,10 +62,15 @@ const registerBotHandlers = (bot, dbPool) => {
             keyboard = mainMenuKeyboardObj;
 
             if (ctx.callbackQuery?.message?.message_id) {
-                await ctx.editMessageText(message, {
-                    reply_markup: keyboard.reply_markup,
-                    parse_mode: message.includes('*') ? 'MarkdownV2' : undefined
-                });
+                try {
+                    await ctx.editMessageText(message, {
+                        reply_markup: keyboard.reply_markup,
+                        parse_mode: message.includes('*') ? 'MarkdownV2' : undefined
+                    });
+                } catch (error) {
+                    // await ctx.replyWithMarkdownV2(message, { reply_markup: keyboard.reply_markup });
+                    await ctx.reply(message, keyboard);
+                }
             } else {
                 if (message.includes('*')) {
                     await ctx.replyWithMarkdownV2(message, { reply_markup: keyboard.reply_markup });
@@ -295,6 +300,75 @@ const registerBotHandlers = (bot, dbPool) => {
     });
 
     /** 
+     * Iniciar votação na funcionalidade selecionada com pagamento por pix
+    */
+    bot.action('request_feature_pix', async (ctx) => {
+        try {
+            await ctx.answerCbQuery();
+            const telegramUserId = ctx.from.id;
+            const userState = awaitingInputForUser[telegramUserId];
+            const message = `Digite um valor para o deposito Pix\\. O valor deverá ser no máximo de até R$ 3\\.000,00\\.`;
+            const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
+            setUserState(ctx.from.id, { type: 'request_feature_pix_amount', featureTitle: userState.featureTitle, featureShortDescription: userState.featureShortDescription, featureDetailedDescription: userState.featureDetailedDescription });
+        } catch (error) {
+            logError('request_feature_pix', error, ctx);
+            await ctx.answerCbQuery('❌ Erro ao iniciar votação com pagamento por Pix', true);
+        }
+    });
+
+    /** 
+     * Iniciar votação na funcionalidade selecionada com pagamento por depix
+    */
+    bot.action('request_feature_depix', async (ctx) => {
+        try {
+            await ctx.answerCbQuery();
+            const telegramUserId = ctx.from.id;
+            const userState = awaitingInputForUser[telegramUserId];
+
+            // Obter o próximo ID da funcionalidade
+            const { rows } =await dbPool.query(
+                `SELECT nextval('features_id_seq')`,
+                []
+            );
+
+            // Gerar endereço Liquid para depósito para a feature
+            const data = await liquidApiService.generateAddressForDeposit(rows[0].nextval);
+            const { address } = data;
+
+            // TODO sanitizar inputs
+            // Salvar a nova funcionalidade no banco de dados
+            await dbPool.query(
+                `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [rows[0].nextval, userState.featureTitle, userState.featureShortDescription, userState.featureDetailedDescription, address]
+            );
+
+            const feature = {
+                id: rows[0].nextval,
+                title: userState.featureTitle,
+                address: address
+            }
+
+            const message = `📋 **${feature.id}\\# ${feature.title}**\n\n` +
+                `Sugestão cadastrada com sucesso\\.\n\n`+ 
+                `Realize um deposito Depix / L\\-BTC / USDT no endereço **Liquid** abaixo\\. Após o depósito ser confirmado, sua sugestão será liberada e estará elegível para votação e implementação\\.\n\n` +
+                `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n` +
+                `Endereço: \n${escapeMarkdownV2(feature.liquid_address)}`;
+            
+            const keyboard = Markup.inlineKeyboard([
+                [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+            ]);
+            
+            await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+            
+        } catch (error) {
+            logError('request_feature_depix', error, ctx);
+            await ctx.answerCbQuery('❌ Erro ao iniciar votação com pagamento por Depix', true);
+        }
+    });
+    
+
+    /** 
      * Iniciar solicitação de uma nova feature
     */
     bot.action('request_feature', async (ctx) => {
@@ -346,7 +420,7 @@ const registerBotHandlers = (bot, dbPool) => {
 
         } else if (userState && userState.type === 'request_feature_short_description' ) {
             try {
-                const message = `Para finalizar, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
+                const message = `Quase lá, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
                 const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
                 setUserState(ctx.from.id, { type: 'request_feature_detailed_description', featureTitle: userState.featureTitle, featureShortDescription: text });
             } catch (error) { 
@@ -355,50 +429,20 @@ const registerBotHandlers = (bot, dbPool) => {
                 await ctx.replyWithMarkdownV2('Para finalizar, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.');
             }
         } else if (userState && userState.type === 'request_feature_detailed_description' ) {
-
             try {
-
-                // Obter o próximo ID da funcionalidade
-                const { rows } =await dbPool.query(
-                    `SELECT nextval('features_id_seq')`,
-                    []
-                );
-
-                // Gerar endereço Liquid para depósito
-                const data = await liquidApiService.generateAddressForDeposit(rows[0].nextval);
-                const { address } = data;
-
-                // TODO sanitizar inputs
-                // Salvar a nova funcionalidade no banco de dados
-                await dbPool.query(
-                    `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)
-                     VALUES ($1, $2, $3, $4, $5)`,
-                    [rows[0].nextval, userState.featureTitle, userState.featureShortDescription, text, address]
-                );
-
-                // TODO disponibilizar pagamento nova feature com pix
-                const message = `✅ Sua sugestão de funcionalidade foi registrada com sucesso\\.\n\n` +
-                    `Realize um deposito Depix / L\\-BTC / USDT no endereço **Liquid** abaixo\\.\n\n` +
-                    `Após o depósito ser confirmado, sua funcionalidade estará elegível para votação e implementação\\. Quanto maior o valor depositado, maior a prioridade na implementação\\.\n\n` +
-                    `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n` +
-                    `Endereço: \n${escapeMarkdownV2(address)}`
+                const message = `Para finalizar o cadastro é necessário realizar um depósito de qualquer valor\\. Por favor, selecione abaixo uma forma de pagamento\\.`;
                 const keyboard = Markup.inlineKeyboard([
-                    [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+                    [Markup.button.callback('💸 Pix', 'request_feature_pix')],
+                    [Markup.button.callback('💼 Depix / L-BTC / USDT', 'request_feature_depix')],
+                    [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
                 ]);
-                
-                if (userState.messageIdToEdit) {
-                    await ctx.editMessageText(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
-                } else {
-                    await ctx.replyWithMarkdownV2(message, keyboard);
-                }
-
-                clearUserState(telegramUserId);
+                await ctx.replyWithMarkdownV2(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+                setUserState(ctx.from.id, { type: 'request_feature_payment_method', featureTitle: userState.featureTitle, featureShortDescription: userState.featureShortDescription, featureDetailedDescription: text });
             } catch (error) { 
-                logError('finalize_request_feature', error, ctx); 
+                logError('request_feature_detailed_description', error, ctx); 
                 if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
-                await ctx.replyWithMarkdownV2('❌ Erro ao registrar a funcionalidade\\. Por favor, tente /start novamente\\.');
+                await ctx.replyWithMarkdownV2('Para finalizar o cadastro é necessário realizar um depósito de qualquer valor\\. Por favor, selecione abaixo um forma de pagamento\\.');
             }
-
         } else if (userState && userState.type === 'start_vote_feature_pix') {
 
             // Validate monetary amount
@@ -443,7 +487,7 @@ const registerBotHandlers = (bot, dbPool) => {
                     caption += `⏱️ Validade: 19 minutos\n\n`;
                     caption += `**PIX Copia e Cola:**\n`;
                     caption += `\`${escapeMarkdownV2(pixData.qrCode)}\`\n\n`;
-                    caption += `Após o depósito ser confirmado, sua funcionalidade estará elegível para votação e implementação\\.\n\n`;
+                    caption += `Após o depósito ser confirmado, sua sugestão será liberada e estará elegível para votação e implementação\\.\n\n`;
                     caption += `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n`;
                     
                     // Adicionar botoes
@@ -481,6 +525,107 @@ const registerBotHandlers = (bot, dbPool) => {
                     if (messageIdToUpdate) await ctx.telegram.editMessageText(ctx.chat.id, messageIdToUpdate, undefined, errorReply);
                     else await ctx.reply(errorReply);
                 }
+            } else { 
+                await ctx.replyWithMarkdownV2(`Valor inválido\\. Por favor, envie um valor entre R\\$ 1\\.00 e R\\$ ${escapeMarkdownV2(maxAllowed.toFixed(2))} \\(ex: \`45.21\`\\)\\.`);
+            }
+
+        } else if (userState && userState.type === 'request_feature_pix_amount') {
+            // Validate monetary amount
+            const maxAllowed = 3000;
+            const validation = validateMonetaryAmount(text, {
+                minValue: 1,
+                maxValue: maxAllowed,
+                maxDecimals: 2
+            });
+
+            if (validation.valid) {
+                const amount = validation.value;
+                logger.info(`Received amount ${amount} for deposit from user ${telegramUserId}`);
+
+                try {
+
+                    // Obter o próximo ID da funcionalidade
+                    const { rows } =await dbPool.query(
+                        `SELECT nextval('features_id_seq')`,
+                        []
+                    );
+    
+                    // Gerar endereço Liquid para depósito para a feature
+                    const data = await liquidApiService.generateAddressForDeposit(rows[0].nextval);
+                    const { address } = data;
+    
+                    // Gerar Pix via API Atlas
+                    // TODO descomentar
+                    // const pixData = await atlasApiService.generatePixForDeposit(amount, address);
+    
+                    // TODO sanitizar inputs
+                    // Salvar a nova funcionalidade no banco de dados
+                    await dbPool.query(
+                        `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)
+                         VALUES ($1, $2, $3, $4, $5)`,
+                        [rows[0].nextval, userState.featureTitle, userState.featureShortDescription, userState.featureDetailedDescription, address]
+                    );
+
+                    // TODO remover teste
+                    let pixData = {
+                        id: '65e7ceba-1fc1-4cbd-a054-d205faeaa173',
+                        qrCode: '00020101021226860014br.gov.bcb.pix2564qrcode.fitbank.com.br/QR/cob/038B94EE0B5149E6567D609B1E86F3DD6365204000053039865802BR5925PLEBANK.COM.BR SOLUCOES E6007BARUERI61080645400062070503***6304B7DB'
+                    }
+                    
+                    // Persisitir transação no banco de dados
+                    const dbResult = await dbPool.query( 'INSERT INTO features_pix_transactions (feature_id, user_id, requested_brl_amount, depix_amount_expected, pix_qr_code_payload, payment_status, atlas_transaction_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id', [rows[0].nextval, parseInt(telegramUserId), amount, (amount - 0.99), pixData.qrCode, 'PENDING', pixData.id]);
+                    const internalTxId = dbResult.rows[0].id;
+                    logger.info(`Transaction ${internalTxId} for BRL ${amount.toFixed(2)} saved. Pix API ID: ${pixData.id}`);
+    
+                    // Objeto agregar campos
+                    const feature = {
+                        id: rows[0].nextval,
+                        title: userState.featureTitle
+                    }
+
+                    // Exibir qrcode e dados
+                    let caption = `📋 **${feature.id}\\# ${feature.title}**\n\n`;
+                    caption += `💸 **PIX \\- R\\$ ${escapeMarkdownV2(amount.toFixed(2))}**\n\n`;
+                    caption += `📱 Escaneie com seu banco\n`;
+                    caption += `⏱️ Validade: 19 minutos\n\n`;
+                    caption += `**PIX Copia e Cola:**\n`;
+                    caption += `\`${escapeMarkdownV2(pixData.qrCode)}\`\n\n`;
+                    caption += `Sugestão cadastrada com sucesso\\. Realize um deposito Pix com os dados acima\\. Após o depósito ser confirmado, sua sugestão será liberada e estará elegível para votação e implementação\\.\n\n`;
+                    caption +=  `Em caso de dúvidas ou problemas, contate o suporte em: ${escapeMarkdownV2(config.links.supportContact)}\\.\n\n`;
+                        
+                    // Adicionar botoes
+                    // TODO implementar cancelar pix
+                    const keyboard = Markup.inlineKeyboard([
+                        [Markup.button.callback('⬅️ Voltar ao Menu', 'back_to_main_menu')]
+                        // [Markup.button.callback('❌ Cancelar', `cancel_qr:${pixData.id}`)]
+                    ]);
+    
+                    // Gerar QR code personalizado com logo Atlas
+                    let qrPhotoMessage;
+                    try {
+                        // TODO revisar imagem do QR personalizado
+                        // const customQRBuffer = await generateCustomQRCode(pixData.qrCode, amount);
+                        const customQRBuffer = await generateMinimalQRCode(pixData.qrCode, amount);
+                        qrPhotoMessage = await ctx.replyWithPhoto(
+                            { source: customQRBuffer },
+                            {
+                                caption: caption,
+                                parse_mode: 'MarkdownV2',
+                                reply_markup: keyboard.reply_markup
+                            }
+                        );
+                        logger.info('QR code personalizado com logo Atlas enviado com sucesso');
+                    } catch (qrError) {
+                        logger.error('Erro ao gerar QR personalizado, usando QR do DePix:', qrError);
+                    }
+    
+                    clearUserState(telegramUserId);
+                } catch (error) { 
+                    logError('finalize_request_feature', error, ctx); 
+                    if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
+                    await ctx.replyWithMarkdownV2('❌ Erro ao registrar a funcionalidade\\. Por favor, tente /start novamente\\.');
+                }
+                
             } else { 
                 await ctx.replyWithMarkdownV2(`Valor inválido\\. Por favor, envie um valor entre R\\$ 1\\.00 e R\\$ ${escapeMarkdownV2(maxAllowed.toFixed(2))} \\(ex: \`45.21\`\\)\\.`);
             }
