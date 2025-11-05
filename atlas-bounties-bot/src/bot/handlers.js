@@ -3,6 +3,7 @@ const config = require('../core/config');
 const logger = require('../core/logger');
 const { escapeMarkdownV2 } = require('../utils/escapeMarkdown');
 const { validateMonetaryAmount } = require('../utils/validateMonetaryAmount');
+const { validateInput } = require('../utils/validateInput');
 const liquidApiService = require('../services/liquidApiService');
 const atlasApiService = require('../services/atlasApiService');
 const { generateCustomQRCode, generateMinimalQRCode } = require('../services/qrCodeGenerator');
@@ -335,7 +336,6 @@ const registerBotHandlers = (bot, dbPool) => {
             const data = await liquidApiService.generateAddressForDeposit(rows[0].nextval);
             const { address } = data;
 
-            // TODO sanitizar inputs
             // Salvar a nova funcionalidade no banco de dados
             await dbPool.query(
                 `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)
@@ -409,9 +409,16 @@ const registerBotHandlers = (bot, dbPool) => {
 
         if (userState && userState.type === 'request_feature_initial') {
             try {
-               const message = `Agora, digite o *uma descrição curta* para a funcionalidade em até 100 caracteres\\.`;
-               const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
-               setUserState(ctx.from.id, { type: 'request_feature_short_description', featureTitle: text });
+                const validation = validateInput(text, {
+                    maxValue: 50
+                });
+                if (validation.valid) {
+                    const message = `Agora, digite o *uma descrição curta* para a funcionalidade em até 100 caracteres\\.`;
+                    const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
+                    setUserState(ctx.from.id, { type: 'request_feature_short_description', featureTitle: text });
+                } else { 
+                    await ctx.replyWithMarkdownV2(`Titulo inválido\\. Por favor, envie um texto de até 50 caracteres\\.`);
+                }
            } catch (error) { 
                logError('request_feature_short_description', error, ctx); 
                if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
@@ -420,9 +427,16 @@ const registerBotHandlers = (bot, dbPool) => {
 
         } else if (userState && userState.type === 'request_feature_short_description' ) {
             try {
-                const message = `Quase lá, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
-                const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
-                setUserState(ctx.from.id, { type: 'request_feature_detailed_description', featureTitle: userState.featureTitle, featureShortDescription: text });
+                const validation = validateInput(text, {
+                    maxValue: 100
+                });
+                if (validation.valid) {
+                    const message = `Quase lá, digite o *uma descrição detalhada* para a funcionalidade em até 500 caracteres\\.`;
+                    const sentMessage = ctx.callbackQuery?.message ? await ctx.editMessageText(message, { parse_mode: 'MarkdownV2' }) : await ctx.replyWithMarkdownV2(message);
+                    setUserState(ctx.from.id, { type: 'request_feature_detailed_description', featureTitle: userState.featureTitle, featureShortDescription: text });
+                } else { 
+                    await ctx.replyWithMarkdownV2(`Descrição inválida\\. Por favor, envie um texto de até 100 caracteres\\.`);
+                }
             } catch (error) { 
                 logError('request_feature_detailed_description', error, ctx); 
                 if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
@@ -430,14 +444,21 @@ const registerBotHandlers = (bot, dbPool) => {
             }
         } else if (userState && userState.type === 'request_feature_detailed_description' ) {
             try {
-                const message = `Para finalizar o cadastro é necessário realizar um depósito de qualquer valor\\. Por favor, selecione abaixo uma forma de pagamento\\.`;
-                const keyboard = Markup.inlineKeyboard([
-                    [Markup.button.callback('💸 Pix', 'request_feature_pix')],
-                    [Markup.button.callback('💼 Depix / L-BTC / USDT', 'request_feature_depix')],
-                    [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
-                ]);
-                await ctx.replyWithMarkdownV2(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
-                setUserState(ctx.from.id, { type: 'request_feature_payment_method', featureTitle: userState.featureTitle, featureShortDescription: userState.featureShortDescription, featureDetailedDescription: text });
+                const validation = validateInput(text, {
+                    maxValue: 500
+                });
+                if (validation.valid) {
+                    const message = `Para finalizar o cadastro é necessário realizar um depósito de qualquer valor\\. Por favor, selecione abaixo uma forma de pagamento\\.`;
+                    const keyboard = Markup.inlineKeyboard([
+                        [Markup.button.callback('💸 Pix', 'request_feature_pix')],
+                        [Markup.button.callback('💼 Depix / L-BTC / USDT', 'request_feature_depix')],
+                        [Markup.button.callback('❌ Cancelar', 'back_to_main_menu')]
+                    ]);
+                    await ctx.replyWithMarkdownV2(message, { parse_mode: 'MarkdownV2', reply_markup: keyboard.reply_markup });
+                    setUserState(ctx.from.id, { type: 'request_feature_payment_method', featureTitle: userState.featureTitle, featureShortDescription: userState.featureShortDescription, featureDetailedDescription: text });
+                } else { 
+                    await ctx.replyWithMarkdownV2(`Descrição inválida\\. Por favor, envie um texto de até 500 caracteres\\.`);
+                }
             } catch (error) { 
                 logError('request_feature_detailed_description', error, ctx); 
                 if (!ctx.answered) { try { await ctx.answerCbQuery('Ops! Tente novamente.'); } catch(e){} }
@@ -470,6 +491,7 @@ const registerBotHandlers = (bot, dbPool) => {
                     feature.liquid_address = 'lq1qqv43u2v8kmalvwmek7und4agdcxl6lq2juffljundpvjzyyvz82utl5use54jpvx3yx8s80zy6c8gt6s9mtvc2lqur79atzq3'; 
 
                     // Gerar Pix via API Atlas
+                    // TODO remover comentario
                     // const pixData = await atlasApiService.generatePixForDeposit(amount,feature.liquid_address);
 
                     let pixData = {
@@ -555,10 +577,9 @@ const registerBotHandlers = (bot, dbPool) => {
                     const { address } = data;
     
                     // Gerar Pix via API Atlas
-                    // TODO descomentar
+                    // TODO remover comentario
                     // const pixData = await atlasApiService.generatePixForDeposit(amount, address);
     
-                    // TODO sanitizar inputs
                     // Salvar a nova funcionalidade no banco de dados
                     await dbPool.query(
                         `INSERT INTO features (id, title, short_description, detailed_description, liquid_address)

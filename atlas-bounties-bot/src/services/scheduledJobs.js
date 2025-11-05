@@ -17,7 +17,7 @@ class ScheduledJobs {
         // Schedule liquid payment detector
         this.scheduleLiquidPaymentDetector();
 
-        // TODO criar job pagamento pix??
+        // TODO criar job pagamento pix?? É realmente necessário visto que quando a Eulen emitir os tokens e depositar o Depix já será reconhecido?)
 
         logger.info('[ScheduledJobs] All jobs initialized');
     }
