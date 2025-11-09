@@ -78,7 +78,7 @@ class ScheduledJobs {
                                     WHERE id = $4`,
                                     [usdt_amount, utxo.height, ranking, feature.id]
                                 );
-                                logger.info(`[ScheduledJobs] Updated feature ${feature.id} with new amount ${utxo.value} of Depix at height ${utxo.height}`);
+                                logger.info(`[ScheduledJobs] Updated feature ${feature.id} with new amount ${utxo.value} of USDT at height ${utxo.height}`);
                             }
 
                             // Depix
